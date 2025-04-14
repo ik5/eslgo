@@ -77,7 +77,7 @@ func (opts InboundOptions) Dial(address string) (*Conn, error) {
 
 func (c *Conn) disconnectLoop(onDisconnect func()) {
 	select {
-	case <-c.responseChannels[TypeDisconnect]:
+	case <-c.disconnectChannel:
 		c.Close()
 		if onDisconnect != nil {
 			onDisconnect()
@@ -91,7 +91,7 @@ func (c *Conn) disconnectLoop(onDisconnect func()) {
 func (c *Conn) authLoop(auth command.Auth, authTimeout time.Duration) {
 	for {
 		select {
-		case <-c.responseChannels[TypeAuthRequest]:
+		case <-c.authChannel:
 			authCtx, cancel := context.WithTimeout(c.runningContext, authTimeout)
 			err := c.doAuth(authCtx, auth)
 			cancel()

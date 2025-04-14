@@ -35,6 +35,8 @@ type Conn struct {
 	responseChannels     map[string]chan *RawResponse
 	responseChanMutex    sync.RWMutex
 	eventListenerLock    sync.RWMutex
+	disconnectChannel    chan *RawResponse
+	authChannel          chan *RawResponse
 	eventListeners       map[string]map[string]EventListener
 	eventListenerCounter int
 	outbound             bool
@@ -82,15 +84,15 @@ func newConnection(c net.Conn, outbound bool, opts Options) *Conn {
 			TypeEventPlain:  make(chan *RawResponse),
 			TypeEventXML:    make(chan *RawResponse),
 			TypeEventJSON:   make(chan *RawResponse),
-			TypeAuthRequest: make(chan *RawResponse, 1), // Buffered to ensure we do not lose the initial auth request before we are setup to respond
-			TypeDisconnect:  make(chan *RawResponse),
 		},
-		runningContext: runningContext,
-		stopFunc:       stop,
-		eventListeners: make(map[string]map[string]EventListener),
-		outbound:       outbound,
-		logger:         opts.Logger,
-		exitTimeout:    opts.ExitTimeout,
+		runningContext:    runningContext,
+		disconnectChannel: make(chan *RawResponse),
+		authChannel:       make(chan *RawResponse, 1), // Buffered to ensure we do not lose the initial auth request before we are setup to respond
+		stopFunc:          stop,
+		eventListeners:    make(map[string]map[string]EventListener),
+		outbound:          outbound,
+		logger:            opts.Logger,
+		exitTimeout:       opts.ExitTimeout,
 	}
 	go instance.receiveLoop()
 	go instance.eventLoop()
@@ -310,8 +312,24 @@ func (c *Conn) doMessage() error {
 
 	c.responseChanMutex.RLock()
 	defer c.responseChanMutex.RUnlock()
-	responseChan, ok := c.responseChannels[response.GetHeader("Content-Type")]
-	if !ok && len(c.responseChannels) <= 0 {
+
+	var responseChan chan *RawResponse
+
+	contentType := response.GetHeader("Content-Type")
+	ok := true
+
+	switch contentType {
+	case TypeAuthRequest:
+		responseChan = c.authChannel
+
+	case TypeDisconnect:
+		responseChan = c.disconnectChannel
+
+	default:
+		responseChan, ok = c.responseChannels[contentType]
+
+	}
+	if !ok && (len(c.responseChannels) <= 0 || responseChan == nil) {
 		// We must have shutdown!
 		return errors.New("no response channels")
 	}

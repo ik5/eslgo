@@ -98,6 +98,10 @@ func (c *Conn) dummyLoop() {
 	select {
 	case <-c.responseChannels[TypeDisconnect]:
 		c.logger.Info("Disconnect outbound connection: %s", c.conn.RemoteAddr())
+
+		if c.onDisconnect != nil {
+			c.onDisconnect(context.Background(), c)
+		}
 		if c.closeDelay >= 0 {
 			time.AfterFunc(c.closeDelay*time.Second, func() {
 				c.Close()

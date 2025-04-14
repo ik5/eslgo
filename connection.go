@@ -206,10 +206,6 @@ func (c *Conn) close() {
 
 	// Close the connection only after we have the response channel lock and we have deleted all response channels to ensure we don't receive on a closed channel
 	_ = c.conn.Close()
-
-	if c.onDisconnect != nil {
-		c.onDisconnect(context.Background(), c)
-	}
 }
 
 func (c *Conn) callEventListener(event *Event) {
